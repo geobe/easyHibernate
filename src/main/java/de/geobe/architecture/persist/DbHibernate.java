@@ -38,7 +38,11 @@ import org.hibernate.service.ServiceRegistry;
 import java.util.List;
 
 /**
- * Hibernate Database access
+ * Manage hibernate database access for a single database. More then one DbHibernate object can be used to
+ * connect to different databases. Basic configuration is defined in an xml configuration file
+ * (default hibernate.cfg.xml), other files can be passed to the constructor.<br>
+ * This is a "heavy weight" object because connectiong to a database is a complex operation. Thus objects of this
+ * class should be constructed at program start and closed before its end.
  * @author georg beier
  */
 public class DbHibernate {

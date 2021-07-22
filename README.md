@@ -22,7 +22,7 @@ objects. So session objects usually don't show up in application code when using
 ### DbAccess
 This interface defines the basic CRUD database operations. It follows the popular Data Access Object (DAO) pattern.
 Using an interface allows a "real" database backed implementation DaoHibernate and a mock implementation
-DaoTransientListfor some test settings.
+DaoTransientList for some test settings.
 
 ### DaoHibernate
 

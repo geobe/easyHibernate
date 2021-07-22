@@ -52,14 +52,12 @@ import java.util.stream.Collectors;
  *
  * @param <PersistType> a persisted type that is handled by this dao
  */
-@SuppressWarnings("deprecated")
-public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
+public class DaoHibernate<PersistType> implements DataAccess<PersistType>{
 
     // Attribute Definitions
 
-    @SuppressWarnings("rawtypes")
-    private Class accessedType;
-    private DbHibernate dbAccess;
+    private Class<?> accessedType;
+    private DbHibernate dbHibernate;
 
     // Constructors
 
@@ -71,18 +69,17 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
      *                    Hibernate needs type information at runtime!
      * @param dbac        The Hibernate database access object
      */
-    @SuppressWarnings("rawtypes")
-    public DaoHibernate(Class persistType, DbHibernate dbac) {
+    public DaoHibernate(Class<?> persistType, DbHibernate dbac) {
         accessedType = persistType;
-        dbAccess = dbac;
+        dbHibernate = dbac;
     }
 
     /**
      * commits a transaction on all daos in this thread that are linked to the
-     * same dbAccess
+     * same dbHibernate
      */
     public void commit() {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         Transaction t = s.getTransaction();
         if (t != null) {
             t.commit();
@@ -94,7 +91,7 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
      * same dbAccess object which implies to the same session
      */
     public void rollback() {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         Transaction t = s.getTransaction();
         if (t != null) {
             t.rollback();
@@ -110,17 +107,20 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
      * @see DbHibernate#closeSession()
      */
     public void closeSession() {
-        dbAccess.closeSession();
+        dbHibernate.closeSession();
     }
 
     /**
-     * (non-Javadoc)
+     * save object to persistent storage
+     * Also starts a transaction, if none is active
      *
-     * @see DataAccess#save(Object)
-     * also starts a transaction, if none is active
+     * @param obj
+     *            object to be saved
+     * @return true if successful, false if object is "stale" (i.e. object was
+     *         changed by an other thread or process)
      */
     public boolean save(PersistType obj) {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         try {
             s.saveOrUpdate(obj);
             return true;
@@ -138,52 +138,63 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
     }
 
     /*
-     * (non-Javadoc)
+     * Fetch object from persistent storage
+     * Also starts a transaction, if none is active
      *
-     * @see de.geobe.architecture.persist.DataAccess#fetch(java.io.Serializable)
-     * also starts a transaction, if none is active
+     * @param id
+     *            key property of object
+     * @return object, if found, else null
      */
     @SuppressWarnings("unchecked")
     public PersistType fetch(Serializable id) {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         return (PersistType) s.get(accessedType, id);
     }
 
     /*
-     * (non-Javadoc)
+     * Fetch all objects of PersistType in persistent storage
+     * Also starts a transaction, if none is active
      *
-     * @see de.geobe.architecture.persist.DataAccess#fetchAll()
-     * also starts a transaction, if none is active
+     * @return list of all objects
      */
     @SuppressWarnings("unchecked")
     public List<PersistType> fetchAll() {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         return (List<PersistType>) s.createQuery(
                 "from " + accessedType.getCanonicalName()).list();
     }
 
-    /*
-     * (non-Javadoc)
+    /**
+     * executes hibernate query <br>
+     * (e.g. select address from person p join p.address)
+     * Also starts a transaction, if none is active
      *
-     * @see de.geobe.architecture.persist.DataAccess#find(java.lang.String)
-     * also starts a transaction, if none is active
+     * @param query
+     *            simple HQL query string
+     * @return list of returned objects
      */
     @SuppressWarnings("unchecked")
     public List<Object> find(String query) {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         return s.createQuery(query).list();
     }
 
-    /*
-     * (non-Javadoc)
+    /**
+     * executes hibernate query with parameters <br>
+     * (e.g. from person p where p.name = :name)
+     * Also starts a transaction, if none is active
      *
-     * @see de.geobe.architecture.persist.DataAccess#find(java.lang.String,
-     *      java.util.Map)
-     * also starts a transaction, if none is active
+     * @param query
+     *            HQL query string containing named parameters in hibernate
+     *            style (e.g. :name)
+     * @param params
+     *            map of actual parameters with parameter name as key (without :)
+     *            and actual parameter value as value
+     * @return list of returned objects
      */
     @SuppressWarnings("unchecked")
     public List<Object> find(String query, Map<String, Object> params) {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         Query<?> hibernateQuery = s.createQuery(query, accessedType);
         for (String pname : params.keySet()) {
             hibernateQuery.setParameter(pname, params.get(pname));
@@ -191,32 +202,41 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
         return (List<Object>) hibernateQuery.list();
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see de.geobe.architecture.persist.DataAccess#findByExample(java.lang.Object)
-     * also starts a transaction, if none is active<br>
+    /**
+     * Query by example. Find objects that are "similar" to the sample object.<br>
+     * String properties are matched with <i>like</i>, so SQL wildcards (%) can
+     * be used. 
      * Only single valued attributes are considered, no arrays or collections
+     *
+     * @param sample
+     *            a sample object
+     * @return list of objects that conform to sample in all not null properties
      */
     public List<PersistType> findByExample(PersistType sample) {
         return findByExample(sample, new ArrayList<>());
     }
 
-    /*
-     * (non-Javadoc)
+    /**
+     * Query by example. Find objects that are "similar" to the sample object.<br>
+     * String properties are matched with <i>like</i>, so SQL wildcards (%) can
+     * be used. 
+     * Only single valued attributes are considered, no arrays or collections.
+     * Also starts a transaction, if none is active<br>
      *
-     * @see de.geobe.architecture.persist.DataAccess#findByExample(java.lang.Object,
-     *      java.util.Collection)
-     * also starts a transaction, if none is active<br>
-     * Only single valued attributes are considered, no arrays or collections
+     * @param sample
+     *            a sample object
+     * @param excluded
+     *            properties not considered im matching
+     * @return list of objects that conform to sample in all not null properties
      */
     @SuppressWarnings("unchecked")
     public List<PersistType> findByExample(PersistType sample,
                                                 Collection<String> excluded) {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         CriteriaBuilder criteriaBuilder = s.getCriteriaBuilder();
-        CriteriaQuery<PersistType> criteriaQuery = criteriaBuilder.createQuery(accessedType);
-        Root<PersistType> root = criteriaQuery.from(accessedType);
+        CriteriaQuery<PersistType> criteriaQuery =
+                (CriteriaQuery<PersistType>) criteriaBuilder.createQuery(accessedType);
+        Root<PersistType> root = (Root<PersistType>) criteriaQuery.from(accessedType);
         EntityType<PersistType> entityType = root.getModel();
         Set<Attribute<? super PersistType, ?>> attributes = entityType.getAttributes();
         List<Attribute<? super PersistType, ?>> basicAttributes = attributes.stream().filter(attribute ->
@@ -274,49 +294,48 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
         return query.getResultList();
     }
 
-    /*
-     * (non-Javadoc)
+    /**
+     * Delete object from persistent storage.
+     * Also starts a transaction, if none is active
      *
-     * @see de.geobe.architecture.persist.DataAccess#delete(java.lang.Object)
-     * also starts a transaction, if none is active
+     * @param obj
+     *            object to be deleted
      */
     public void delete(PersistType obj) {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         s.delete(obj);
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see de.geobe.architecture.persist.DataAccess#deleteAll()
-     * also starts a transaction, if none is active
+    /**
+     * Delete all objects of PersistType from persistent storage
+     * Also starts a transaction, if none is active
      */
     public void deleteAll() {
-        Session s = dbAccess.getActiveSession();
+        Session s = dbHibernate.getActiveSession();
         s.createQuery("delete " + accessedType.getCanonicalName())
                 .executeUpdate();
     }
 
-    // Attribute Accessors
+    // Attribute Accessors should never be needed outside the class
 
     @SuppressWarnings("rawtypes")
-    public Class getAccessedType() {
+    private Class getAccessedType() {
         return accessedType;
     }
-
-    @SuppressWarnings({"unused", "rawtypes"})
-    private void setAccessedType(Class pAccessedType) {
-        accessedType = pAccessedType;
+//
+//    @SuppressWarnings({"unused", "rawtypes"})
+//    private void setAccessedType(Class pAccessedType) {
+//        accessedType = pAccessedType;
+//    }
+//
+    private DbHibernate getDbAccess() {
+        return dbHibernate;
     }
-
-    public DbHibernate getDbAccess() {
-        return dbAccess;
-    }
-
-    @SuppressWarnings("unused")
-    private void setDbAccess(DbHibernate pDbAccess) {
-        dbAccess = pDbAccess;
-    }
+//
+//    @SuppressWarnings("unused")
+//    private void setDbAccess(DbHibernate pDbAccess) {
+//        dbHibernate = pDbAccess;
+//    }
 
     /**
      * build getter name for attribute name
@@ -327,10 +346,8 @@ public class DaoHibernate<PersistType> implements DataAccess<PersistType> {
         return "get" + attName.substring(0, 1).toUpperCase() + attName.substring(1);
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see java.lang.Object#toString()
+    /**
+     * just when debugging ...
      */
     public String toString() {
         return "(accessedType: " + getAccessedType() + ")" + "(dbAccess: "
