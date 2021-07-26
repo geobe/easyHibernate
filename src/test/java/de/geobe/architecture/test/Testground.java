@@ -7,9 +7,16 @@ import org.h2.tools.Server;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
-public class Playground {
+/**
+ * test class to verify all methods of DaoHibernate and DbHibernate.
+ * TODO transform into unit tests
+ */
+public class Testground {
 
     static Server tcpServer;
     static Server webServer;
@@ -48,6 +55,11 @@ public class Playground {
         }
     }
 
+    static void stopServer() {
+        tcpServer.shutdown();
+        webServer.shutdown();
+    }
+
     static void createDbConnection() {
         db = new DbHibernate(classes);
         baseDao = new DaoHibernate<>(AddressBase.class, db);
@@ -78,16 +90,47 @@ public class Playground {
         return result;
     }
 
-    public static void main(String[] args) throws SQLException, InterruptedException {
+    public static void main(String[] args) {
         runServer();
         createDbConnection();
         commDao.deleteAll();
         baseDao.deleteAll();
         baseDao.closeSession();
         generateSample().forEach(adb -> baseDao.save(adb));
+        List<AddressBase> adbs = baseDao.fetchAll();
+        assert adbs.size() == 6;
+        PersonalAddress sample = new PersonalAddress();
+        sample.setNickname("L%");
+        List<PersonalAddress> qbe1 = persDao.findByExample(sample);
+        assert qbe1.stream().map(PersonalAddress::getNickname).collect(Collectors.toList()).containsAll(Arrays.asList("Lups", "Lemmi"));
+        PersonalAddress anAddress = qbe1.get(0);
+        long id = anAddress.getId();
+        anAddress.setNickname("Duffy");
+        persDao.save(anAddress);
+        AddressBase toFetch = baseDao.fetch(id);
+        assert toFetch.getNickname().equals("Duffy");
+        List<Object> cl = commDao.find("from Comm");
+        assert cl.size() == 2;
+        List<Object> hql = commDao.find("select owner from Comm where commtype = :ct", Map.of("ct", CommType.MOBILE.ordinal()));
+        assert hql.size() == 1;
+        assert hql.get(0) instanceof PersonalAddress;
         baseDao.commit();
-        while (true) {
-            Thread.sleep(1000);
-        }
+        toFetch.setNickname("Schnuffy");
+        baseDao.save(toFetch);
+        baseDao.rollback();
+        assert toFetch.getNickname().equals("Duffy");
+        baseDao.delete(toFetch);
+        baseDao.commit();
+        toFetch = baseDao.fetch(id);
+        assert toFetch == null;
+        baseDao.closeSession();
+        persDao.closeSession();
+        db.closeSession();
+        System.out.println("Database " + db.toString() + ", baseDao " + baseDao.toString());
+//        stopServer();
+        db.closeDatabase();
+//        while (true) {
+//            Thread.sleep(1000);
+//        }
     }
 }

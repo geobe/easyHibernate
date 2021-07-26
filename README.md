@@ -19,11 +19,6 @@ Database sessions are provided by this class. These are "light weight" objects t
 a set of cohesive database operations. In most cases, session management can be delegated to DaoHibernate
 objects. So session objects usually don't show up in application code when using this library.
 
-### DbAccess
-This interface defines the basic CRUD database operations. It follows the popular Data Access Object (DAO) pattern.
-Using an interface allows a "real" database backed implementation DaoHibernate and a mock implementation
-DaoTransientList for some test settings.
-
 ### DaoHibernate
 
 Dao implementation for Hibernate 5.x persistence layer. Goal is to encapsulate all database operations 
@@ -34,7 +29,3 @@ for all operations. Transactions are automatically started for update operations
 transition is already running, further updates are automatically added to the transaction scope. This
 works across all DAO objects bound to the same DbHibernate! So don't forget to commit or rollback your changes 
 at the end of a group of cohesive updates! Calling commit() on any of the affected DAOs is sufficient.
-
-### DaoTransientList
-
-An incomplete implementation of the DbAccess interface for some testing purposes.

@@ -45,7 +45,7 @@
 <!-- -->
 		<property name="hibernate.show_sql">false</property>
 		<property name="hibernate.format_sql">true</property>
-
+		<property name="hibernate.connection.autocommit">true</property>
 		<property name="hibernate.hbm2ddl.auto">validate</property>
 	</session-factory>
 </hibernate-configuration>

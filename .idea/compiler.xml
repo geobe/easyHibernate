@@ -4,6 +4,9 @@
     <bytecodeTargetLevel target="11" />
   </component>
   <component name="JavacSettings">
-    <option name="ADDITIONAL_OPTIONS_STRING" value="&quot;-Xlint:unchecked&quot;" />
+    <option name="ADDITIONAL_OPTIONS_STRING" value="&quot;Xlint:unchecked&quot;" />
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="easyHibernate.main" options="&quot;-Xlint:unchecked&quot;" />
+    </option>
   </component>
 </project>

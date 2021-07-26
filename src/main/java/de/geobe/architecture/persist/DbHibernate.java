@@ -43,88 +43,81 @@ import java.util.List;
  * (default hibernate.cfg.xml), other files can be passed to the constructor.<br>
  * This is a "heavy weight" object because connectiong to a database is a complex operation. Thus objects of this
  * class should be constructed at program start and closed before its end.
+ *
  * @author georg beier
  */
 public class DbHibernate {
 
-	// Attribute Definitions
+    private final SessionFactory sessionFactory;
+    private Session activeSession;
 
-//	private static Configuration configuration;
+    /**
+     *
+     */
+    public void closeDatabase() {
+        closeSession();
+        sessionFactory.close();
+    }
 
-	private final SessionFactory sessionFactory;
+    /**
+     * open a session and associate it with a transaction
+     */
+    private Session openSession() {
+        activeSession = sessionFactory.openSession();
+        return activeSession;
+    }
 
-	private Session activeSession;
+    /**
+     * close active session and automatically commit open transactions
+     */
+    public void closeSession() {
+        if (activeSession != null && activeSession.isOpen()) {
+            Transaction t = activeSession.getTransaction();
+            if (t.isActive()) {
+                t.commit();
+            }
+            activeSession.close();
+        }
+    }
 
-	// Operations
+    /**
+     * create a new session if necessary. also start a transaction if necessary.
+     *
+     * @return an open session
+     */
+    public Session getActiveSession() {
+        if (activeSession == null || !activeSession.isOpen()) {
+            openSession();
+        }
+        Transaction t = activeSession.getTransaction();
+        if (t == null || !t.isActive()) {
+            activeSession.beginTransaction();
+        }
+        return activeSession;
+    }
 
-	/**
-	 */
-	public void closeDatabase() {
-		sessionFactory.close();
-	}
+    public String toString() {
+        return "(activeSession: " + getActiveSession() + ")";
+    }
 
-	// Implemented abstract operations
+    public DbHibernate(List<String> fqcns) {
+        this(fqcns, "");
+    }
 
-	/**
-	 * open a session and associate it with a transaction
-	 */
-	private Session openSession() {
-		activeSession = sessionFactory.openSession();
-		return activeSession;
-	}
+    public DbHibernate(List<String> fqcns, String resourceName) {
+        StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
+        if (resourceName.equals("")) {
+            serviceRegistryBuilder.configure();
+        } else {
+            serviceRegistryBuilder.configure(resourceName);
+        }
+        ServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
 
-	/**
-	 * close active session and automatically commit open transactions
-	 */
-	public void closeSession() {
-		if (activeSession != null && activeSession.isOpen()) {
-			Transaction t = activeSession.getTransaction();
-			if (t.isActive()) {
-				t.commit();
-			}
-			activeSession.close();
-		}
-	}
-
-	// Attribute Accessors
-
-	/**
-	 * create a new session if necessary. also start a transaction if necessary.
-	 * 
-	 * @return an open session
-	 */
-	public Session getActiveSession() {
-		if (activeSession == null || !activeSession.isOpen()) {
-			openSession();
-		}
-		Transaction t = activeSession.getTransaction();
-		if (t == null || !t.isActive()) {
-			activeSession.beginTransaction();
-		}
-		return activeSession;
-	}
-
-	public String toString() {
-		return "(activeSession: " + getActiveSession() + ")";
-	}
-
-	public DbHibernate(List<String> fqcns) {
-		this(fqcns, "");
-	}
-
-	public DbHibernate(List<String> fqcns, String resourceName ) {
-		StandardServiceRegistryBuilder serviceRegistryBuilder = new StandardServiceRegistryBuilder();
-		if(resourceName.equals("")) {
-			serviceRegistryBuilder.configure();
-		} else {
-			serviceRegistryBuilder.configure(resourceName);
-		}
-		ServiceRegistry serviceRegistry = serviceRegistryBuilder.build();
-		MetadataSources metadataSources = new MetadataSources(serviceRegistry);
-		fqcns.forEach(metadataSources::addAnnotatedClassName);
-		MetadataBuilder metadataBuilder = metadataSources.getMetadataBuilder();
-		Metadata metadata = metadataBuilder.build();
-		sessionFactory = metadata.buildSessionFactory();
-	}
+        MetadataSources metadataSources = new MetadataSources(serviceRegistry);
+        fqcns.forEach(metadataSources::addAnnotatedClassName);
+        MetadataBuilder metadataBuilder = metadataSources.getMetadataBuilder();
+        Metadata metadata = metadataBuilder.build();
+        sessionFactory = metadata.buildSessionFactory();
+    }
 
 }

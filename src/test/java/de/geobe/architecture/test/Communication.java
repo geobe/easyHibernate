@@ -5,7 +5,7 @@ import javax.persistence.*;
 @Entity(name = "Comm")
 public class Communication {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private long id;
     private CommType commType;
     private String locator;
