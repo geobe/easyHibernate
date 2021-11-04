@@ -3,7 +3,8 @@ plugins {
 }
 
 group 'de.geobe.architecture.persist'
-version '1.0-SNAPSHOT'
+
+version '1.0'
 
 repositories {
     mavenCentral()
@@ -12,9 +13,7 @@ repositories {
 dependencies {
     implementation group: 'org.hibernate', name: 'hibernate-core', version: '5.5.3.Final'
     testImplementation group: 'com.h2database', name: 'h2', version: '1.4.200'
-//    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
     testRuntimeOnly group: 'com.mchange', name: 'c3p0', version: '0.9.5.5'
-//    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
 }
 
 test {
