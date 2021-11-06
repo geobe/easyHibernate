@@ -118,8 +118,13 @@ public class Testground {
         toFetch.setNickname("Schnuffy");
         baseDao.save(toFetch);
         baseDao.rollback();
-        assert toFetch.getNickname().equals("Duffy");
-        baseDao.delete(toFetch);
+        // rollback doesn't change the local object
+        assert toFetch.getNickname().equals("Schnuffy");
+        // so retrieve a new copy from db
+        AddressBase newFetch = baseDao.fetch(toFetch.getId());
+        // assert rollback succeeded
+        assert newFetch.getNickname().equals("Duffy");
+        baseDao.delete(newFetch);
         baseDao.commit();
         toFetch = baseDao.fetch(id);
         assert toFetch == null;

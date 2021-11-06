@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'maven-publish'
 }
 
 group 'de.geobe.architecture.persist'
@@ -13,9 +14,30 @@ repositories {
 dependencies {
     implementation group: 'org.hibernate', name: 'hibernate-core', version: '5.5.3.Final'
     testImplementation group: 'com.h2database', name: 'h2', version: '1.4.200'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
     testRuntimeOnly group: 'com.mchange', name: 'c3p0', version: '0.9.5.5'
 }
 
 test {
     useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'de.geobe.architecture.persist'
+            artifactId = 'easyHibernate'
+            version = '1.1'
+
+            from components.java
+        }
+
+    }
+    repositories {
+        maven {
+            name 'testRepo'
+            url = layout.buildDirectory.dir('myrepo')
+        }
+    }
 }

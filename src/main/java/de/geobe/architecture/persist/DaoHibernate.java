@@ -115,6 +115,7 @@ public class DaoHibernate<PersistType> {
     public boolean save(PersistType obj) {
         Session s = dbHibernate.getActiveSession();
         try {
+            Transaction t = s.getTransaction();
             s.saveOrUpdate(obj);
             return true;
         } catch (StaleObjectStateException stex) {
