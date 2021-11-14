@@ -26,9 +26,7 @@
 
 package de.geobe.architecture.persist;
 
-import org.hibernate.Session;
-import org.hibernate.StaleObjectStateException;
-import org.hibernate.Transaction;
+import org.hibernate.*;
 import org.hibernate.query.Query;
 
 import javax.persistence.criteria.CriteriaBuilder;
@@ -157,6 +155,115 @@ public class DaoHibernate<PersistType> {
         Session s = dbHibernate.getActiveSession();
         return (List<PersistType>) s.createQuery(
                 "from " + accessedType.getCanonicalName()).list();
+    }
+
+    /**
+     * Iterate over objects of PersistType in pages.
+     * @param pageSize number of objects per page
+     * @param startAt row in result where to start
+     * @return Iterator on Lists of PersistType objects, each holding one page
+     */
+    @SuppressWarnings("unchecked")
+    public Iterator<List<PersistType>> iteratePages(int pageSize, int startAt) {
+        Session session = dbHibernate.getActiveSession();
+        ScrollableResults scrollableResults = session
+                .createQuery("from " + accessedType.getCanonicalName())
+                .setCacheMode(CacheMode.IGNORE)
+                .scroll(ScrollMode.FORWARD_ONLY);
+        scrollableResults.scroll(startAt);
+
+        return new Iterator<List<PersistType>>() {
+            boolean hasNextBeenCalled = false;
+            boolean lastNextCallResult = false;
+            List<PersistType> pageList;
+            @Override
+            public boolean hasNext() {
+                if(!hasNextBeenCalled) {
+                    lastNextCallResult = scrollableResults.next();
+                    hasNextBeenCalled = true;
+                }
+                if(!lastNextCallResult) {
+                    scrollableResults.close();
+                }
+                return lastNextCallResult;
+            }
+
+            @Override
+            public List<PersistType> next() {
+                pageList = nextPage();
+                return Collections.unmodifiableList(pageList);
+            }
+
+            private List<PersistType> nextPage() {
+                List<PersistType> page = new ArrayList<>(pageSize);
+                while (page.size() < pageSize) {
+                    if (! hasNextBeenCalled) {
+                        lastNextCallResult = scrollableResults.next();
+                        hasNextBeenCalled = true;
+                    }
+                    if (lastNextCallResult){
+                        page.add((PersistType) scrollableResults.get(0));
+                        hasNextBeenCalled = false;
+                    } else {
+                        break;
+                    }
+                }
+                return page;
+            }
+        };
+    }
+
+    /**
+     * Iterate over all objects of PersistType using Hibernate ScrollableResults class.
+     * Delegates managing the list of all objects to JDBC.
+     * Useful for working with large result sets or for uis with limited
+     * scrolling capacity.
+     * Also starts a transaction, if none is active
+     *
+     * @return Iterator on all objects of PersistType
+     */
+    @SuppressWarnings("unchecked")
+    public Iterator<PersistType> iterateAll() {
+        Session session = dbHibernate.getActiveSession();
+        ScrollableResults scrollableResults = session
+                .createQuery("from " + accessedType.getCanonicalName())
+                .setCacheMode(CacheMode.IGNORE)
+                .scroll(ScrollMode.FORWARD_ONLY);
+
+        /*
+         * emulate an Iterator on ScrollableResults
+         */
+        return new Iterator<PersistType>() {
+            boolean hasNextBeenCalled = false;
+            boolean lastNextCallResult = false;
+            @Override
+            public boolean hasNext() {
+                if(!hasNextBeenCalled) {
+                    lastNextCallResult = scrollableResults.next();
+                    hasNextBeenCalled = true;
+                }
+                if(!lastNextCallResult) {
+                    if(scrollableResults != null) {
+                        scrollableResults.close();
+                    }
+                }
+                return lastNextCallResult;
+            }
+
+            @Override
+            public PersistType next() {
+                if(!hasNextBeenCalled) {
+                    lastNextCallResult = scrollableResults.next();
+                    hasNextBeenCalled = true;
+                    if(!lastNextCallResult) {
+                        throw new NoSuchElementException();
+                    }
+                }
+                PersistType nextObject = (PersistType) scrollableResults.get(0);
+                hasNextBeenCalled = false;
+                return nextObject;
+            }
+        };
     }
 
     /**
