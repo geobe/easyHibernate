@@ -51,7 +51,7 @@ The `build.gradle` file references the git library you want to import:
 git {
     implementation 'https://github.com/geobe/easyHibernate.git', {
         name 'easyHibernate'
-        tag 'V1.1'
+        tag 'V1.1.1'
     }
 }
 ```
