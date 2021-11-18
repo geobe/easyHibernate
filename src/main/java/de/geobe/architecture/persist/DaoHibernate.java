@@ -33,7 +33,8 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
-import javax.persistence.metamodel.*;
+import javax.persistence.metamodel.Attribute;
+import javax.persistence.metamodel.IdentifiableType;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -68,13 +69,21 @@ public class DaoHibernate<PersistType> {
 
     /**
      * commits a transaction on all daos in this thread that are linked to the
-     * same dbHibernate
+     * same dbHibernate. Causes a transaction rollback if commit fails.
+     * @return true if successful, false if at least one object is "stale" (i.e. object was
+     * changed by another thread or process)
      */
-    public void commit() {
+    public boolean commit() {
         Session s = dbHibernate.getActiveSession();
         Transaction t = s.getTransaction();
-        if (t != null) {
-            t.commit();
+        try {
+            if (t != null) {
+                t.commit();
+            }
+            return true;
+        } catch (RuntimeException ex) {
+            t.rollback();
+            return false;
         }
     }
 
@@ -108,7 +117,7 @@ public class DaoHibernate<PersistType> {
      *
      * @param obj object to be saved
      * @return true if successful, false if object is "stale" (i.e. object was
-     * changed by an other thread or process)
+     * changed by another thread or process)
      */
     public boolean save(PersistType obj) {
         Session s = dbHibernate.getActiveSession();
@@ -158,32 +167,67 @@ public class DaoHibernate<PersistType> {
     }
 
     /**
-     * Iterate over objects of PersistType in pages.
+     * Iterate over all objects of PersistType in pages.
+     * Method uses ScrollableResults class and closes it after each iteration.
+     * This makes iteration much slower on large data sets
+     * but it is safe to break iteration at any time.
+     * <p>
+     * Also starts a transaction, if none is active
+     *
      * @param pageSize number of objects per page
-     * @param startAt row in result where to start
+     * @param startAt  row in result where to start
      * @return Iterator on Lists of PersistType objects, each holding one page
      */
     @SuppressWarnings("unchecked")
     public Iterator<List<PersistType>> iteratePages(int pageSize, int startAt) {
+        return iteratePages(pageSize, startAt, "");
+    }
+
+    /**
+     * Restrict and/or order iteration over objects of type PersistType in pages by extending the basic HQL query.
+     * The basic query is "from PersistType", predicates String is appended after a blank.
+     * Method uses ScrollableResults class and closes it after each iteration.
+     * This makes iteration much slower on large data sets
+     * but it is safe to break iteration at any time.
+     * <p>
+     * Also starts a transaction, if none is active
+     *
+     * @param pageSize number of objects per page
+     * @param startAt  row in result where to start
+     * @param predicates String with syntactically correct HQL predicates
+     * @return Iterator on Lists of PersistType objects, each holding one page
+     */
+    @SuppressWarnings("unchecked")
+    public Iterator<List<PersistType>> iteratePages(int pageSize, int startAt, String predicates) {
+        if (predicates != null && predicates.length() > 0) {
+            predicates = " " + predicates;
+        } else {
+            predicates = "";
+        }
         Session session = dbHibernate.getActiveSession();
-        ScrollableResults scrollableResults = session
-                .createQuery("from " + accessedType.getCanonicalName())
-                .setCacheMode(CacheMode.IGNORE)
-                .scroll(ScrollMode.FORWARD_ONLY);
-        scrollableResults.scroll(startAt);
+        Query<PersistType> query = session
+                .createQuery("from " + accessedType.getCanonicalName() + predicates)
+                .setCacheMode(CacheMode.IGNORE);
 
         return new Iterator<List<PersistType>>() {
+            int scrollIndex = startAt;
             boolean hasNextBeenCalled = false;
             boolean lastNextCallResult = false;
+            ScrollableResults scrollableResults;
             List<PersistType> pageList;
+
+            /**
+             * Initialze scrolableResults to next page, if not already done
+             * @return true if not at the end
+             */
             @Override
             public boolean hasNext() {
-                if(!hasNextBeenCalled) {
+                if (!hasNextBeenCalled) {
+                    scrollableResults = query.scroll(ScrollMode.FORWARD_ONLY);
+                    scrollableResults.scroll(scrollIndex);
+                    scrollIndex += pageSize;
                     lastNextCallResult = scrollableResults.next();
                     hasNextBeenCalled = true;
-                }
-                if(!lastNextCallResult) {
-                    scrollableResults.close();
                 }
                 return lastNextCallResult;
             }
@@ -191,23 +235,24 @@ public class DaoHibernate<PersistType> {
             @Override
             public List<PersistType> next() {
                 pageList = nextPage();
+                hasNextBeenCalled = false;
                 return Collections.unmodifiableList(pageList);
             }
 
             private List<PersistType> nextPage() {
                 List<PersistType> page = new ArrayList<>(pageSize);
+                if (!hasNextBeenCalled) {
+                    hasNext();
+                }
                 while (page.size() < pageSize) {
-                    if (! hasNextBeenCalled) {
-                        lastNextCallResult = scrollableResults.next();
-                        hasNextBeenCalled = true;
-                    }
-                    if (lastNextCallResult){
+                    if (lastNextCallResult) {
                         page.add((PersistType) scrollableResults.get(0));
-                        hasNextBeenCalled = false;
+                        lastNextCallResult = scrollableResults.next();
                     } else {
                         break;
                     }
                 }
+                scrollableResults.close();
                 return page;
             }
         };
@@ -215,18 +260,43 @@ public class DaoHibernate<PersistType> {
 
     /**
      * Iterate over all objects of PersistType using Hibernate ScrollableResults class.
-     * Delegates managing the list of all objects to JDBC.
-     * Useful for working with large result sets or for uis with limited
-     * scrolling capacity.
+     * Hibernate class ScrollableResults is used to scroll through results. This is very fast
+     * for very large result sets. But ScrollableResults object is only closed at the end of
+     * iteration. So the whole result set should always be iterated to the end. Use iteratePages
+     * to safely work only on a limited part.
+     * <p>
      * Also starts a transaction, if none is active
      *
      * @return Iterator on all objects of PersistType
      */
     @SuppressWarnings("unchecked")
     public Iterator<PersistType> iterateAll() {
+        return iterateAll("");
+    }
+
+    /**
+     * Restrict and/or order iteration over objects of type PersistType by extending the basic HQL query.
+     * The basic query is "from PersistType", predicates String is appended after a blank.
+     * The query MUST return only objects of type PersistType!
+     * The internally used ScrollableResults object is only closed at the end of iteration.
+     * So the whole result set should always be iterated to the end. Use iteratePages to safely
+     * work only on a limited part.
+     * <p>
+     * Also starts a transaction, if none is active
+     *
+     * @param predicates String with syntactically correct HQL predicates
+     * @return Iterator on all objects of PersistType
+     */
+    @SuppressWarnings("unchecked")
+    public Iterator<PersistType> iterateAll(String predicates) {
+        if (predicates != null && predicates.length() > 0) {
+            predicates = " " + predicates;
+        } else {
+            predicates = "";
+        }
         Session session = dbHibernate.getActiveSession();
         ScrollableResults scrollableResults = session
-                .createQuery("from " + accessedType.getCanonicalName())
+                .createQuery("from " + accessedType.getCanonicalName() + predicates)
                 .setCacheMode(CacheMode.IGNORE)
                 .scroll(ScrollMode.FORWARD_ONLY);
 
@@ -236,14 +306,15 @@ public class DaoHibernate<PersistType> {
         return new Iterator<PersistType>() {
             boolean hasNextBeenCalled = false;
             boolean lastNextCallResult = false;
+
             @Override
             public boolean hasNext() {
-                if(!hasNextBeenCalled) {
+                if (!hasNextBeenCalled) {
                     lastNextCallResult = scrollableResults.next();
                     hasNextBeenCalled = true;
                 }
-                if(!lastNextCallResult) {
-                    if(scrollableResults != null) {
+                if (!lastNextCallResult) {
+                    if (scrollableResults != null) {
                         scrollableResults.close();
                     }
                 }
@@ -252,10 +323,10 @@ public class DaoHibernate<PersistType> {
 
             @Override
             public PersistType next() {
-                if(!hasNextBeenCalled) {
+                if (!hasNextBeenCalled) {
                     lastNextCallResult = scrollableResults.next();
                     hasNextBeenCalled = true;
-                    if(!lastNextCallResult) {
+                    if (!lastNextCallResult) {
                         throw new NoSuchElementException();
                     }
                 }
