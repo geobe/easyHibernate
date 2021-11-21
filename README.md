@@ -1,6 +1,14 @@
 # easyHibernate
 A minimalistic interface framework library to hibernate persistence for simple programs that need
 a database but are small enough to make using Spring or a JEE container just overkill.
+
+Read [Hibernate documentation](https://docs.jboss.org/hibernate/orm/5.6/userguide/html_single/Hibernate_User_Guide.html) 
+to understand schema generation, [transactions](https://docs.jboss.org/hibernate/orm/5.6/userguide/html_single/Hibernate_User_Guide.html#transactions)
+and [optimistic vs. pessimistic locking](https://docs.jboss.org/hibernate/orm/5.6/userguide/html_single/Hibernate_User_Guide.html#locking).
+
+All this can mostly be done using annotations and a minimal hibernate configuration file.
+The testing project [easyHibernateTest](https://github.com/geobe/easyHibernateTest) holds examples for 
+configuration files and annotation based schema generation.
 ## Classes
 ### DbHibernate
 Manage hibernate database access for a single database and hide subtleties of the database system and hibernate
@@ -25,6 +33,8 @@ transition is already running, further updates are automatically added to the tr
 works across all DAO objects bound to the same DbHibernate! So don't forget to commit or rollback your changes 
 at the end of a group of cohesive updates! Calling commit() on any of the affected DAOs is sufficient.
 ## Using this library
+## Use jar file
+Just download the latest jar from the libs directory and use in your project.
 ### No Maven artifact
 Sorry, I don't spend the effort to publish this project on a maven repository. If you like this library 
 and are experienced with maven, you are welcome to join and do it.
@@ -51,7 +61,7 @@ The `build.gradle` file references the git library you want to import:
 git {
     implementation 'https://github.com/geobe/easyHibernate.git', {
         name 'easyHibernate'
-        tag 'V1.1.1'
+        tag 'V1.1.2'
     }
 }
 ```
